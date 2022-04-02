@@ -1,0 +1,32 @@
+{
+  "name": "signalk-spectra-plugin",
+  "version": "0.0.1",
+  "description": "Signal K plugin to read Spectra Watermaker data",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "signalk-node-server-plugin",
+    "marine",
+    "nautic"
+  ],
+  "signalk-plugin-enabled-by-default": true,
+  "author": {
+    "name": "Hans Tool",
+    "email": "hans@defect.org"
+  },
+  "main": "plugin/index.js",
+  "license": "ISC",
+    "repository": {
+    "type": "git",
+    "url": "git+https://github.com/htool/signalk-spectra-plugin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/htool/signalk-spectra-plugin/issues"
+  },
+  "homepage": "https://github.com/htool/signalk-spectra-plugin#readme",
+  "dependencies": {
+    "debug": "^4.3.4",
+    "ws": "^8.5.0"
+  }
+}
