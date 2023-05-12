@@ -18,6 +18,8 @@ module.exports = function(app, options) {
 
   var unsubscribes = []
 
+  const autostore_regex = /Autostore : ((\d+)d )?((\d+)h )?(\d+)m/gm;
+
   var schema = {
     type: "object",
     title: "Spectra Watermaker",
@@ -123,6 +125,13 @@ module.exports = function(app, options) {
         value: {
           units: 'K',
           description: 'Feed water temperature'
+        }
+      },
+      {
+        path: 'watermaker.spectra.autostore',
+        value: {
+          units: 's',
+          description: 'Seconds before next autostore cycle'
         }
       }
     ]
@@ -242,6 +251,19 @@ module.exports = function(app, options) {
         //2 = stop
         case '4':
           wm_state = 'idle'
+
+          //parse our autostore and save it.
+          var m
+          if ((m = autostore_regex.exec(dataObj.label1)) !== null) {
+            var autostore = (m[2] * 24 * 60 * 60) + (m[4] * 60 * 60) + (m[5] * 60)
+
+            var update = {
+              path: 'watermaker.spectra.autostore',
+              value: autostore
+            }
+            updateValues.push(update)
+          }
+          
           break
 
         //page 5 = running - product
@@ -271,6 +293,19 @@ module.exports = function(app, options) {
         //0 = menu
         case '10':
           wm_state = 'idle'
+          
+          //parse our autostore and save it.
+          var m
+          if ((m = autostore_regex.exec(dataObj.label1)) !== null) {
+            var autostore = (m[2] * 24 * 60 * 60) + (m[4] * 60 * 60) + (m[5] * 60)
+
+            var update = {
+              path: 'watermaker.spectra.autostore',
+              value: autostore
+            }
+            updateValues.push(update)
+          }
+          
           break
       
         //page 12 = choose liter quantity
