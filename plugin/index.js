@@ -38,6 +38,101 @@ module.exports = function(app, options) {
   plugin.start = function(options, restartPlugin) {
     app.debug('Starting plugin');
     app.debug('Options: %j', JSON.stringify(options));
+    
+    // our metadata for our data fields
+    var metas = [
+      {
+        path: 'watermaker.spectra.bat_v',
+        value: {
+          units: 'V',
+          description: 'Voltage at drive electronics'
+        }
+      },
+      {
+        path: 'watermaker.spectra.boost_p',
+        value: {
+          units: 'Pa',
+          description: 'Boost pump pressure'
+        }
+      },
+      {
+        path: 'watermaker.spectra.boost_p',
+        value: {
+          units: 'Pa',
+          description: 'Boost pump pressure'
+        }
+      },
+      {
+        path: 'watermaker.spectra.f_flow',
+        value: {
+          units: 'm3/s',
+          description: 'Feed water flowrate'
+        }
+      },
+      {
+        path: 'watermaker.spectra.feed_p',
+        value: {
+          units: 'Pa',
+          description: 'Feed pump pressure'
+        }
+      },
+      {
+        path: 'watermaker.spectra.p_flow',
+        value: {
+          units: 'm3/s',
+          description: 'Product (output) water flowrate'
+        }
+      },
+      {
+        path: 'watermaker.spectra.ph',
+        value: {
+          units: 'pH',
+          description: 'Product (output) water pH'
+        }
+      },
+      {
+        path: 'watermaker.spectra.reg_5v',
+        value: {
+          units: 'V',
+          description: 'Internal 5v regulator voltage'
+        }
+      },   
+      {
+        path: 'watermaker.spectra.reg_5v',
+        value: {
+          units: 'V',
+          description: 'Internal 5v regulator voltage'
+        }
+      }, 
+      {
+        path: 'watermaker.spectra.sal_1',
+        value: {
+          units: 'ppm',
+          description: 'Product (output) water salinity'
+        }
+      },   
+      {
+        path: 'watermaker.spectra.sal_2',
+        value: {
+          units: 'ppm',
+          description: 'Feed water salinity'
+        }
+      },   
+      {
+        path: 'watermaker.spectra.temp_1',
+        value: {
+          units: 'K',
+          description: 'Feed water temperature'
+        }
+      }
+    ]
+
+    // Publish metas only once
+    app.handleMessage(plugin.id, {
+      updates: [{ 
+        meta: metas
+      }]
+    });
 
     const SpectraIP = options.IP;
 
