@@ -221,6 +221,39 @@ module.exports = function(app, options) {
       handleData2(e.data)
     }
     
+    function parseAutostore(json, updateValues) {
+      //parse our autostore and save it.
+      var m
+      if ((m = autostore_regex.exec(json.label1)) !== null) {
+        var autostore = (m[2] * 24 * 60 * 60) + (m[4] * 60 * 60) + (m[5] * 60)
+
+        updateValues.push({
+          path: 'watermaker.spectra.autostore',
+          value: autostore
+        })
+      }
+      
+      return updateValues;
+    }
+
+    function parseProductionSpeed(json, updateValues) {
+      //parse our autostore and save it.
+      if (json.toggle_button == '1'){
+        updateValues.push({
+            path: 'watermaker.spectra.productionSpeed',
+            value: 'high'
+        })
+      }
+      else if (json.toggle_button == '0'){
+        updateValues.push({
+            path: 'watermaker.spectra.productionSpeed',
+            value: 'low'
+        })
+      }
+      
+      return updateValues
+    }
+    
     function handleData2 (json) {
       var dataObj = JSON.parse(json)
       
@@ -244,38 +277,36 @@ module.exports = function(app, options) {
         case '2':
           wm_state = 'freshwater_flush'
           break
-
-        //{ "page": "4", "button0": "FRESH WATER FLUSH", "button1": "START", "button2": "STOP", "label0": "CATALINA 340C", "label1": "Autostore : 4d 23h 59m", "label2": "Tank Level", "label4": "", "gauge0": "0", "gauge0_label": "0%", "logout_button": "0", "tank": "1055" }
+          
+          //{ "page": "4", "button0": "FRESH WATER FLUSH", "button1": "START", "button2": "STOP", "label0": "CATALINA 340C", "label1": "Autostore : 4d 23h 59m", "label2": "Tank Level", "label4": "", "gauge0": "0", "gauge0_label": "0%", "logout_button": "0", "tank": "1055" }
         //0 = fresh water flush
         //1 = start
         //2 = stop
         case '4':
           wm_state = 'idle'
 
-          //parse our autostore and save it.
-          var m
-          if ((m = autostore_regex.exec(dataObj.label1)) !== null) {
-            var autostore = (m[2] * 24 * 60 * 60) + (m[4] * 60 * 60) + (m[5] * 60)
+          updateValues = parseAutostore(dataObj, updateValues)
 
-            var update = {
-              path: 'watermaker.spectra.autostore',
-              value: autostore
-            }
-            updateValues.push(update)
-          }
-          
           break
 
         //page 5 = running - product
+        //{ "page": "5", "button0": "STOP", "label0": "FILLTANK : PRODUCT", "label1": "", "label2": "Quality", "label3": "", "label4": "Quantity", "label5": "1m", "label6": "Elapsed time", "label7": "0.0%", "label8": "Tank 1", "gauge0": "29", "gauge1": "68", "toggle_button": "1", "gauge0_label": "293ppm", "gauge1_label": "52.0lph", "toggle_tank": "0", "toggle_level": "0", "gauge0_mid": "270" }
         //0 = stop
         case '5':
           wm_state = 'running'
+
+          updateValues = parseProductionSpeed(dataObj, updateValues)
+
           break
 
         //page 6 = running - pressure
         //0 = stop
+        //{ "page": "6", "button0": "STOP", "label0": "FILLTANK : PRESSURE", "label1": "", "label2": "Boost", "label3": "", "label4": "Feed", "label5": "2m", "label6": "Elapsed time", "label7": "0.0%", "label8": "Tank 1", "gauge0": "61", "gauge1": "65", "toggle_button": "1", "gauge0_label": "1.3bar", "gauge1_label": "6.8bar", "toggle_tank": "0", "toggle_level": "0", "gauge0_mid": "90" }
         case '6':
           wm_state = 'running'
+          
+          updateValues = parseProductionSpeed(dataObj, updateValues)
+          
           break
 
         //page 7 = main prefs page
@@ -284,9 +315,7 @@ module.exports = function(app, options) {
           wm_state = 'idle'
           break
 
-        //page 10 = running - system starting???
-        //0 = stop
-
+        //page 10 = system startup countdown
         //page 10 = idle / autostore waiting
         //also a generic ok page
         //{ page: '10', button0: 'MENU', label0: 'AUTOSTORE MODE', label1: 'Autostore : 4d 22h 46m', alarm: 'OFF' }
@@ -294,17 +323,7 @@ module.exports = function(app, options) {
         case '10':
           wm_state = 'idle'
           
-          //parse our autostore and save it.
-          var m
-          if ((m = autostore_regex.exec(dataObj.label1)) !== null) {
-            var autostore = (m[2] * 24 * 60 * 60) + (m[4] * 60 * 60) + (m[5] * 60)
-
-            var update = {
-              path: 'watermaker.spectra.autostore',
-              value: autostore
-            }
-            updateValues.push(update)
-          }
+          updateValues = parseAutostore(dataObj, updateValues)
           
           break
       
@@ -336,20 +355,33 @@ module.exports = function(app, options) {
       
         //page 30 = running - prefilter condition
         //0 = stop
+        //{ "page": "30", "button0": "STOP", "label0": "FILLTANK : PREFILTER CONDITION", "gauge0_label": "100%", "label1": "3m", "label2": "Elapsed time", "label3": "0.0%", "label4": "Tank 1", "label5": "Boost 1.3bar | Feed 6.9bar", "gauge0": "100", "toggle_button": "1", "toggle_tank": "0", "toggle_level": "0" }
         case '30':
           wm_state = 'running'
+
+          updateValues = parseProductionSpeed(dataObj, updateValues)
+          
           break
       
         //page 31 = running - system details
         //0 = stop
+        //{ "page": "31", "button0": "STOP", "label0": "CATALINA 340C : SYSTEM DATA", "label1": " Liters per hour  : 53.8 lph", "label2": " Boost Pressure   : 1.3 bar", "label3": " Feed Pressure    : 6.9 bar", "label4": " Product quality  : 282 ppm", "label5": " Water temperature: 28.40 C", "label6": " Voltage          : 26.94 V", "label7": " Filter condition : 100%", "label8": "3m", "label9": "Elapsed time", "label10": "0.0%", "label11": "Tank 1", "toggle_button": "1", "toggle_tank": "0", "toggle_level": "0", "nav_hide": "0" }
         case '31':
           wm_state = 'running'
+          
+          updateValues = parseProductionSpeed(dataObj, updateValues)
+          
           break
       
         //page 32 = running - main dashboard
         //0 = stop
-        case '31':
+        //{ "page": "32", "button0": "STOP", "label0": "FILLTANK : MAIN DASHBOARD", "gauge0_label": "2.8bar", "label1": "Feed Pressure", "gauge1_label": "100%", "label2": "Filter Condition", "gauge2_label": "392ppm", "label3": "Quality", "gauge0": "26", "gauge1": "100", "gauge2": "39", "toggle_button": "1", "toggle_tank": "1", "gauge0_mid": "270" }
+        //{ "page": "32", "button0": "STOP", "label0": "FILLTANK : MAIN DASHBOARD", "gauge0_label": "2.8bar", "label1": "Feed Pressure", "gauge1_label": "100%", "label2": "Filter Condition", "gauge2_label": "392ppm", "label3": "Quality", "gauge0": "26", "gauge1": "100", "gauge2": "39", "toggle_button": "1", "toggle_tank": "1", "gauge0_mid": "270" }
+        case '32':
           wm_state = 'running'
+          
+          updateValues = parseProductionSpeed(dataObj, updateValues)
+          
           break
       
         //page 37 = choose your run mode
