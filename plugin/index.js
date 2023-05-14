@@ -19,6 +19,8 @@ module.exports = function(app, options) {
   var unsubscribes = []
 
   const autostore_regex = /Autostore : ((\d+)d )?((\d+)h )?(\d+)m/gm;
+  const elapsed_regex = /((\d+)d )?((\d+)h )?(\d+)m/gm;
+  const percent_regex = /((\d+).\d+)%/gm;
 
   var schema = {
     type: "object",
@@ -39,12 +41,36 @@ module.exports = function(app, options) {
 
   function doStartWatermaker(context, path, value, callback) {
     app.debug("Start watermaker")
-    if(wm_state == 'idle'){
-      ws2.send(JSON.stringify({"page":"4","cmd":"BUTTON1"}))
-      //we need to delay since we're stringing multiple commands together
-      setTimeout(function() {
-        ws2.send(JSON.stringify({"page":"37","cmd":"BUTTON0"}))
-      }, 1000);
+    if(wm_state == 'idle')
+    {
+      //page 10 is our idle 'autostore' countdown page
+      if (wm_page == '10')
+      {
+        //click the button to leave that page
+        ws2.send(JSON.stringify({"page":"10","cmd":"BUTTON0"}))
+
+        //delays because we are chaining commands
+        setTimeout(function() { ws2.send(JSON.stringify({"page":"4","cmd":"BUTTON1"})) }, 1000)
+        setTimeout(function() { ws2.send(JSON.stringify({"page":"37","cmd":"BUTTON0"})) }, 2000);
+      }
+      //are we already on the main page?
+      else if (wm_page == '4')
+      {
+        ws2.send(JSON.stringify({"page":"4","cmd":"BUTTON1"}))
+
+        //delays because we are chaining commands
+        setTimeout(function() { ws2.send(JSON.stringify({"page":"37","cmd":"BUTTON0"})) }, 1000);
+      }
+      //okay so we are on an unknown page, abort
+      else {
+        return { state: 'COMPLETED', statusCode: 400 };
+      }
+
+      //move to the details page so we can get filter stats
+      //setTimeout(function() {
+      //  ws2.send(JSON.stringify({"page":"37","cmd":"BUTTON0"}))
+      //}, 1000);
+
       return { state: 'COMPLETED', statusCode: 200 };
     } else {
       return { state: 'COMPLETED', statusCode: 400 };
@@ -54,7 +80,7 @@ module.exports = function(app, options) {
   function doStopWatermaker(context, path, value, callback) {
     app.debug("Stop watermaker")
     if(wm_state == 'running'){
-      ws2.send(JSON.stringify({"page":wm_page,"cmd":"BUTTON0"}))      
+      ws2.send(JSON.stringify({"page":wm_page,"cmd":"BUTTON0"}))   
       return { state: 'COMPLETED', statusCode: 200 };
     } else {
       return { state: 'COMPLETED', statusCode: 400 };
@@ -167,7 +193,15 @@ module.exports = function(app, options) {
           units: 's',
           description: 'Seconds before next autostore cycle'
         }
+      },
+      {
+        path: 'watermaker.spectra.elapsed_time',
+        value: {
+          units: 's',
+          description: 'Elapsed time in current run cycle'
+        }
       }
+      
     ]
 
     // Publish metas only once
@@ -265,6 +299,13 @@ module.exports = function(app, options) {
       if ((m = autostore_regex.exec(json.label1)) !== null) {
         var autostore = (m[2] * 24 * 60 * 60) + (m[4] * 60 * 60) + (m[5] * 60)
 
+        if (m[2])
+          var autostore = (m[2] * 24 * 60 * 60) + (m[4] * 60 * 60) + (m[5] * 60)
+        else if (m[4])
+          var autostore = (m[4] * 60 * 60) + (m[5] * 60)
+        else
+          var autostore = (m[5] * 60)
+
         updateValues.push({
           path: 'watermaker.spectra.autostore',
           value: autostore
@@ -289,6 +330,97 @@ module.exports = function(app, options) {
         })
       }
       
+      return updateValues
+    }
+    
+    function parseElapsedTime(json, updateValues) {
+      var m
+      if ((m = elapsed_regex.exec(json.label8)) !== null) {
+        app.debug(m)
+        
+        if (m[2])
+          var elapsed_time = (m[2] * 24 * 60 * 60) + (m[4] * 60 * 60) + (m[5] * 60)
+        else if (m[4])
+          var elapsed_time = (m[4] * 60 * 60) + (m[5] * 60)
+        else
+          var elapsed_time = (m[5] * 60)
+
+        updateValues.push({
+          path: 'watermaker.spectra.elapsed_time',
+          value: elapsed_time
+        })
+      }
+
+      return updateValues
+    }
+    
+    function parseFilterCondition(json, updateValues) {
+      var m
+      if ((m = percent_regex.exec(json)) !== null) {
+        var percent = parseFloat(m[1])/100
+
+        updateValues.push({
+          path: 'watermaker.spectra.filterCondition',
+          value: percent
+        })
+      }
+
+      return updateValues
+    }
+    
+    function parseFeedPumpCondition(json, updateValues) {
+      var m
+      if ((m = percent_regex.exec(json)) !== null) {
+        var percent = parseFloat(m[1])/100
+
+        updateValues.push({
+          path: 'watermaker.spectra.feedpumpCondition',
+          value: percent
+        })
+      }
+
+      return updateValues
+    }
+
+    function parseCarbonFilterCondition(json, updateValues) {
+      var m
+      if ((m = percent_regex.exec(json)) !== null) {
+        var percent = parseFloat(m[1])/100
+
+        updateValues.push({
+          path: 'watermaker.spectra.carbonFilterCondition',
+          value: percent
+        })
+      }
+
+      return updateValues
+    }
+
+    function parseMembraneCondition(json, updateValues) {
+      var m
+      if ((m = percent_regex.exec(json)) !== null) {
+        var percent = parseFloat(m[1])/100
+
+        updateValues.push({
+          path: 'watermaker.spectra.membraneCondition',
+          value: percent
+        })
+      }
+
+      return updateValues
+    }
+    
+    function parseClarkPumpCondition(json, updateValues) {
+      var m
+      if ((m = percent_regex.exec(json)) !== null) {
+        var percent = parseFloat(m[1])/100
+
+        updateValues.push({
+          path: 'watermaker.spectra.clarkPumpCondition',
+          value: percent
+        })
+      }
+
       return updateValues
     }
     
@@ -408,6 +540,8 @@ module.exports = function(app, options) {
           wm_state = 'running'
           
           updateValues = parseProductionSpeed(dataObj, updateValues)
+          updateValues = parseElapsedTime(dataObj, updateValues)
+          updateValues = parseFilterCondition(dataObj.label7, updateValues)
           
           break
       
@@ -422,7 +556,7 @@ module.exports = function(app, options) {
           
           break
       
-        //page 37 = choose your run mode
+        //page 30 = choose your run mode
         //0  = filltank
         //1 = autorun
         case '30':
@@ -430,9 +564,16 @@ module.exports = function(app, options) {
           break
       
         //page 34 = estimated service interval
-        //{ "page": "34", "label0": "ESTIMATED SERVICE INTERVAL", "label1": "Autostore Timer<br\/>   4d 22h 38m", "label2": "Tank 1", "label3": "Pre filter    : 100.00%", "label4": "Feed Pump     : 89.79%", "label5": "Carbon filter : 98.23%", "label6": "Membrane      : 85.19%", "label7": "Clark Pump    : 94.90%", "label8": " ", "label9": " ", "gauge0": "0", "gauge0_label": "0%", "toggle_level": "0" }
+        //{ "page": "34", "label0": "ESTIMATED SERVICE INTERVAL", "label1": "Autostore Timer<br\/>   4d 23h 17m", "label2": "Tank 1", "label3": "Pre filter    : 100.00%", "label4": "Feed Pump     : 89.17%", "label5": "Carbon filter : 96.69%", "label6": "Membrane      : 85.07%", "label7": "Clark Pump    : 94.59%", "label8": " ", "label9": " ", "gauge0": "0", "gauge0_label": "0%", "toggle_level": "0" }
         case '34':
           wm_state = 'idle'
+          
+          updateValues = parseFilterCondition(dataObj.label3, updateValues)
+          updateValues = parseFeedPumpCondition(dataObj.label4, updateValues)
+          updateValues = parseCarbonFilterCondition(dataObj.label5, updateValues)
+          updateValues = parseMembraneCondition(dataObj.label6, updateValues)
+          updateValues = parseClarkPumpCondition(dataObj.label7, updateValues)
+          
           break
       
         //page 43 = freshwater flush warning dismiss
@@ -465,6 +606,14 @@ module.exports = function(app, options) {
       //app.debug(JSON.stringify(updates))
       app.handleMessage(plugin.id, updates)
     }
+    
+    //main page to prefs
+    //{"page":"4","cmd":"BUTTON4"}
+    
+    //prefs to estimated service interval
+    //{"page":"7","cmd":"BUTTON1"}
+    
+    
   }
 
   plugin.stop = function() {
