@@ -37,6 +37,36 @@ module.exports = function(app, options) {
     return schema
   }
 
+  function doStartWatermaker(context, path, value, callback) {
+    app.debug("Start watermaker")
+    app.debug(context)
+    app.debug(path)
+    app.debug(value)
+    if(wm_state == 'idle'){
+      ws2.send(JSON.stringify({"page":"4","cmd":"BUTTON1"}))
+      //we need to delay since we're stringing multiple commands together
+      setTimeout(function() {
+        ws2.send(JSON.stringify({"page":"37","cmd":"BUTTON0"}))
+      }, 1000);
+      return { state: 'COMPLETED', statusCode: 200 };
+    } else {
+      return { state: 'COMPLETED', statusCode: 400 };
+    }
+  }
+  
+  function doStopWatermaker(context, path, value, callback) {
+    app.debug("Stop watermaker")
+    app.debug(context)
+    app.debug(path)
+    app.debug(value)
+    if(wm_state == 'running'){
+      ws2.send(JSON.stringify({"page":"32","cmd":"BUTTON0"}))      
+      return { state: 'COMPLETED', statusCode: 200 };
+    } else {
+      return { state: 'COMPLETED', statusCode: 400 };
+    }
+  }
+
   plugin.start = function(options, restartPlugin) {
     app.debug('Starting plugin');
     app.debug('Options: %j', JSON.stringify(options));
@@ -163,6 +193,9 @@ module.exports = function(app, options) {
     ws.onmessage = (e) => {
       handleData(e.data)
     }
+    
+    app.registerPutHandler('vessels.self', 'watermaker.spectra.control.start', doStartWatermaker, 'signalk-spectra-plugin');
+    app.registerPutHandler('vessels.self', 'watermaker.spectra.control.stop', doStopWatermaker, 'signalk-spectra-plugin');
 
     function handleData (json) {
       var updateValues = []
@@ -428,13 +461,6 @@ module.exports = function(app, options) {
       app.handleMessage(plugin.id, updates)
     }
   }
-
-  /*
-  var tsreply_object = {
-    page: cur_page,
-    cmd: "BUTTON0"
-  };
-  */ 
 
   plugin.stop = function() {
     app.debug("Stopping")
