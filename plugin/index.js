@@ -2,8 +2,8 @@ const id = "signalk-spectra-plugin";
 const debug = require('debug')(id)
 const WebSocket = require('ws')
 
-var ws
-var ws2
+var data_ws
+var ui_ws
 var plugin = {}
 
 var wm_state = 'unknown'
@@ -11,13 +11,11 @@ var wm_page = 0
 
 /* TODO List:
 
-- Add calls to browse the system info and service interval pages on startup.
-- Make that a function as well that can be called by PUT
-- Add a call on startup to move 1 page left to get the elapsed and filter quality
-- Update the readme with info on new features + node red flows + grafana export (if possible... maybe as files in the plugin)
-- Add config option to allow control
+- Add a call on after run start to move 1 page left to get the elapsed and filter quality
+- Add config option to allow/enable PUT controls
 - Add config option to use old style names/values or use signalk style stuff
 - Update meta to cover all of our fields
+- Update the readme with info on new features + node red flows + grafana export (if possible... maybe as files in the plugin)
 
 */
 
@@ -30,6 +28,7 @@ module.exports = function(app, options) {
 
   var unsubscribes = []
 
+  //various regexes
   const autostore_regex = /Autostore : ((\d+)d )?((\d+)h )?(\d+)m/gm;
   const elapsed_regex = /((\d+)d )?((\d+)h )?(\d+)m/gm;
   const percent_regex = /((\d+).\d+)%/gm;
@@ -56,44 +55,31 @@ module.exports = function(app, options) {
     app.debug("Start watermaker")
     if(wm_state == 'idle')
     {
-      //page 10 is our idle 'autostore' countdown page
+      //commands to start
+      commands = [
+        {"page":"4","cmd":"BUTTON1"},
+        {"page":"37","cmd":"BUTTON0"}
+      ]
+
+      //page 10 is our idle 'autostore' countdown page, so add this to the beginning
       if (wm_page == '10')
-      {
-        //click the button to leave that page
-        ws2.send(JSON.stringify({"page":"10","cmd":"BUTTON0"}))
+        commands.unshift({"page":"10","cmd":"BUTTON0"})
 
-        //delays because we are chaining commands
-        setTimeout(function() { ws2.send(JSON.stringify({"page":"4","cmd":"BUTTON1"})) }, 1000)
-        setTimeout(function() { ws2.send(JSON.stringify({"page":"37","cmd":"BUTTON0"})) }, 2000);
-      }
       //are we already on the main page?
-      else if (wm_page == '4')
+      if (wm_page == '4' || wm_page == '10')
       {
-        ws2.send(JSON.stringify({"page":"4","cmd":"BUTTON1"}))
+        runUICommands(commands)
 
-        //delays because we are chaining commands
-        setTimeout(function() { ws2.send(JSON.stringify({"page":"37","cmd":"BUTTON0"})) }, 1000);
+        return { state: 'COMPLETED', statusCode: 200 };
       }
-      //okay so we are on an unknown page, abort
-      else {
-        return { state: 'COMPLETED', statusCode: 400 };
-      }
-
-      //move to the details page so we can get filter stats
-      //setTimeout(function() {
-      //  ws2.send(JSON.stringify({"page":"37","cmd":"BUTTON0"}))
-      //}, 1000);
-
-      return { state: 'COMPLETED', statusCode: 200 };
-    } else {
-      return { state: 'COMPLETED', statusCode: 400 };
     }
+    return { state: 'COMPLETED', statusCode: 400 };
   }
   
   function doStopWatermaker(context, path, value, callback) {
     app.debug("Stop watermaker")
     if(wm_state == 'running'){
-      ws2.send(JSON.stringify({"page":wm_page,"cmd":"BUTTON0"}))   
+      ui_ws.send(JSON.stringify({"page":wm_page,"cmd":"BUTTON0"}))   
       return { state: 'COMPLETED', statusCode: 200 };
     } else {
       return { state: 'COMPLETED', statusCode: 400 };
@@ -103,11 +89,58 @@ module.exports = function(app, options) {
   function doToggleWatermakerOutputSpeed(context, path, value, callback) {
     app.debug("Toggle watermaker output speed")
     if(wm_state == 'running'){
-      ws2.send(JSON.stringify({"page":wm_page,"cmd":"BUTTON3"}))      
+      ui_ws.send(JSON.stringify({"page":wm_page,"cmd":"BUTTON3"}))      
       return { state: 'COMPLETED', statusCode: 200 };
     } else {
       return { state: 'COMPLETED', statusCode: 400 };
     }
+  }
+
+  function doLookupStats(context, path, value, callback) {
+    app.debug("Looking up stats")
+    if(wm_state == 'idle'){
+      loadAllStats()
+      app.debug('Finished')
+      return { state: 'COMPLETED', statusCode: 200 };
+    } else {
+      return { state: 'COMPLETED', statusCode: 400 };
+    }
+  }
+  
+  function loadAllStats() {
+    let commands = [
+      {"page":"4","cmd":"BUTTON4"},
+      {"page":"7","cmd":"BUTTON1"},
+      {"page":"34","cmd":"BUTTON0"},
+      {"page":"7","cmd":"BUTTON2"},
+      {"page":"25","cmd":"BUTTON0"},
+      {"page":"7","cmd":"BUTTON3"},
+      {"page":"17","cmd":"BUTTON5"},
+      {"page":"7","cmd":"BUTTON9"},
+      {"page":"7","cmd":"BUTTON9"},
+      {"page":"1","cmd":"BUTTON1"}
+    ]
+    
+    //if we're on the idle page, use this:
+    //page 10 is our idle 'autostore' countdown page
+    if (wm_page == '10')
+      commands.unshift({"page":"10","cmd":"BUTTON0"})
+
+    //loop through them.
+    if (wm_page == '4' || wm_page == '10')
+      runUICommands(commands)
+  }
+  
+  function runUICommands(commands){
+    for (var i = 0; i < commands.length; i++) {
+      var cmd = commands[i]
+      setTimeout(runUICommand,(i+1) * 1500, cmd);
+    }
+  }
+  
+  function runUICommand(cmd) {
+    ui_ws.send(JSON.stringify(cmd))
+    app.debug("Running command: " + JSON.stringify(cmd))
   }
   
   // our metadata for our data fields
@@ -260,7 +293,6 @@ module.exports = function(app, options) {
   }
   
   function parseAutostore(json, updateValues) {
-    //parse our autostore and save it.
     var m
     if ((m = autostore_regex.exec(json.label1)) !== null) {
       var autostore = (m[2] * 24 * 60 * 60) + (m[4] * 60 * 60) + (m[5] * 60)
@@ -282,7 +314,6 @@ module.exports = function(app, options) {
   }
 
   function parseProductionSpeed(json, updateValues) {
-    //parse our autostore and save it.
     if (json.toggle_button == '1'){
       updateValues.push({
           path: 'watermaker.spectra.productionSpeed',
@@ -404,7 +435,7 @@ module.exports = function(app, options) {
     return updateValues
   }
   
-  function handleData2 (json)
+  function handleUIData (json)
   {
     var dataObj = JSON.parse(json)
     
@@ -527,7 +558,6 @@ module.exports = function(app, options) {
         break
     
       //page 43 = freshwater flush warning dismiss
-      //0 = dismiss
       case '43':
         wm_state = 'idle'
         break
@@ -565,7 +595,7 @@ module.exports = function(app, options) {
 
   plugin.start = function(options, restartPlugin) {
     app.debug('Starting plugin');
-    app.debug('Options: %j', JSON.stringify(options));
+    app.debug('Options: ' + JSON.stringify(options));
     
     handleMetas()
     
@@ -573,44 +603,49 @@ module.exports = function(app, options) {
     app.registerPutHandler('vessels.self', 'watermaker.spectra.control.start', doStartWatermaker, 'signalk-spectra-plugin');
     app.registerPutHandler('vessels.self', 'watermaker.spectra.control.stop', doStopWatermaker, 'signalk-spectra-plugin');
     app.registerPutHandler('vessels.self', 'watermaker.spectra.control.toggleSpeed', doToggleWatermakerOutputSpeed, 'signalk-spectra-plugin');
+    app.registerPutHandler('vessels.self', 'watermaker.spectra.control.lookupStats', doLookupStats, 'signalk-spectra-plugin');
 
+    //this is our websocket that connects to the 'data' stream
     const SpectraIP = options.IP;
     const url = 'ws://' + SpectraIP + ':9001'
-    ws = new WebSocket(url, ['dumb-increment-protocol'])
+    data_ws = new WebSocket(url, ['dumb-increment-protocol'])
  
-    ws.onopen = () => {
-      app.debug('Connected to Spectra watermaker') 
+    data_ws.onopen = () => {
+      app.debug('Connected to Spectra Watermaker Data socket') 
+    }
+    data_ws.onclose = () => {
+      app.debug('Disconnecting from Spectra Watermaker Data socket') 
     }
  
-    ws.onclose = () => {
-      app.debug('Disconnecting from Spectra watermaker') 
+    data_ws.onerror = (error) => {
+      app.debug(`Data WebSocket error: ${error}`)
     }
  
-    ws.onerror = (error) => {
-      app.debug(`WebSocket error: ${error}`)
-    }
- 
-    ws.onmessage = (e) => {
+    data_ws.onmessage = (e) => {
       handleData(e.data)
     }
     
+    //this is our websocket that connects to the 'ui' stream
     const url2 = 'ws://' + SpectraIP + ':9000'
-    ws2 = new WebSocket(url2, ['dumb-increment-protocol'])
+    ui_ws = new WebSocket(url2, ['dumb-increment-protocol'])
  
-    ws2.onopen = () => {
-      app.debug('Connected to Spectra watermaker') 
+    ui_ws.onopen = () => {
+      app.debug('Connected to Spectra Watermaker UI socket')
+
+      //let us figure out what page we're on then load data.
+      setTimeout(loadAllStats, 3000)
     }
  
-    ws2.onclose = () => {
-      app.debug('Disconnecting from Spectra watermaker') 
+    ui_ws.onclose = () => {
+      app.debug('Disconnecting from Spectra Watermaker UI socket') 
     }
  
-    ws2.onerror = (error) => {
-      app.debug(`WebSocket error: ${error}`)
+    ui_ws.onerror = (error) => {
+      app.debug(`UI WebSocket error: ${error}`)
     }
  
-    ws2.onmessage = (e) => {
-      handleData2(e.data)
+    ui_ws.onmessage = (e) => {
+      handleUIData(e.data)
     }
   }
 
@@ -618,8 +653,8 @@ module.exports = function(app, options) {
     app.debug("Stopping")
     unsubscribes.forEach(f => f());
     unsubscribes = [];
-    ws.close()
-    ws2.close()
+    data_ws.close()
+    ui_ws.close()
     app.debug("Stopped")
   }
 
