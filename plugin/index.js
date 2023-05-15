@@ -9,6 +9,18 @@ var plugin = {}
 var wm_state = 'unknown'
 var wm_page = 0
 
+/* TODO List:
+
+- Add calls to browse the system info and service interval pages on startup.
+- Make that a function as well that can be called by PUT
+- Add a call on startup to move 1 page left to get the elapsed and filter quality
+- Update the readme with info on new features + node red flows + grafana export (if possible... maybe as files in the plugin)
+- Add config option to allow control
+- Add config option to use old style names/values or use signalk style stuff
+- Update meta to cover all of our fields
+
+*/
+
 module.exports = function(app, options) {
   "use strict"
   var plugin = {}
