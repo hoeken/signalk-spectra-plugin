@@ -737,13 +737,6 @@ module.exports = function(app, options) {
         updateValues = parseProductionSpeed(dataObj, updateValues)
         break
     
-      //page 30 = choose your run mode
-      //0  = filltank
-      //1 = autorun
-      case '30':
-        wm_state = 'idle'
-        break
-    
       //page 34 = estimated service interval
       case '34':
         wm_state = 'idle'
@@ -753,7 +746,13 @@ module.exports = function(app, options) {
         updateValues = parseCarbonFilterCondition(dataObj.label5, updateValues)
         updateValues = parseMembraneCondition(dataObj.label6, updateValues)
         updateValues = parseClarkPumpCondition(dataObj.label7, updateValues)
-        
+        break
+
+      //page 37 = choose your run mode
+      //0  = filltank
+      //1 = autorun
+      case '37':
+        wm_state = 'idle'
         break
     
       //page 43 = freshwater flush warning dismiss
