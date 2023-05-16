@@ -12,9 +12,6 @@ var wm_page = 0
 /* TODO List:
 
 - Add a call on after run start to move 1 page left to get the elapsed and filter quality
-- Add config option to allow/enable PUT controls
-- Add config option to use old style names/values or use signalk style stuff
-- Update meta to cover all of our fields
 - Update the readme with info on new features + node red flows + grafana export (if possible... maybe as files in the plugin)
 
 */
@@ -43,6 +40,21 @@ module.exports = function(app, options) {
 	      type: 'string',
 	      title: 'IP address of watermaker',
 	      default: '192.168.x.x'
+      },
+      allowPuts: {
+	      type: 'boolean',
+	      title: 'Allow PUT interface for controlling the watermaker externally. See plugin github for details on usage.',
+	      default: true
+      },
+      allowDetailedStats: {
+	      type: 'boolean',
+	      title: 'Allow detailed stats. This will cause user display to scroll through pages occasionally, but will enable statistics on service intervals, elapsed time, etc.',
+	      default: true
+      },
+      useSignalKStyleValues: {
+	      type: 'boolean',
+	      title: 'Log SignalK style values (SI units and camelCase) (default in 1.0.0) or old raw values (default in 0.2.0)',
+	      default: true
       }
     }
   }
@@ -56,7 +68,7 @@ module.exports = function(app, options) {
     if(wm_state == 'idle')
     {
       //commands to start
-      commands = [
+      var commands = [
         {"page":"4","cmd":"BUTTON1"},
         {"page":"37","cmd":"BUTTON0"}
       ]
@@ -68,7 +80,11 @@ module.exports = function(app, options) {
       //are we already on the main page?
       if (wm_page == '4' || wm_page == '10')
       {
-        runUICommands(commands)
+        queueUICommands(commands)
+        
+        //this will switch to our data page after startup
+        if (plugin.options.allowDetailedStats)
+          setTimeout(runUICommand,(commands.length+1) * 15000, {"page":"32","cmd":"BUTTON1"});
 
         return { state: 'COMPLETED', statusCode: 200 };
       }
@@ -79,7 +95,7 @@ module.exports = function(app, options) {
   function doStopWatermaker(context, path, value, callback) {
     app.debug("Stop watermaker")
     if(wm_state == 'running'){
-      ui_ws.send(JSON.stringify({"page":wm_page,"cmd":"BUTTON0"}))   
+      runUICommand({"page":wm_page,"cmd":"BUTTON0"})
       return { state: 'COMPLETED', statusCode: 200 };
     } else {
       return { state: 'COMPLETED', statusCode: 400 };
@@ -89,7 +105,7 @@ module.exports = function(app, options) {
   function doToggleWatermakerOutputSpeed(context, path, value, callback) {
     app.debug("Toggle watermaker output speed")
     if(wm_state == 'running'){
-      ui_ws.send(JSON.stringify({"page":wm_page,"cmd":"BUTTON3"}))      
+      runUICommand({"page":wm_page,"cmd":"BUTTON3"})     
       return { state: 'COMPLETED', statusCode: 200 };
     } else {
       return { state: 'COMPLETED', statusCode: 400 };
@@ -98,7 +114,7 @@ module.exports = function(app, options) {
 
   function doLookupStats(context, path, value, callback) {
     app.debug("Looking up stats")
-    if(wm_state == 'idle'){
+    if(wm_state == 'idle' && plugin.options.allowDetailedStats){
       loadAllStats()
       app.debug('Finished')
       return { state: 'COMPLETED', statusCode: 200 };
@@ -121,17 +137,16 @@ module.exports = function(app, options) {
       {"page":"1","cmd":"BUTTON1"}
     ]
     
-    //if we're on the idle page, use this:
-    //page 10 is our idle 'autostore' countdown page
+    //page 10 is our idle 'autostore' countdown page, so we need to skip it first
     if (wm_page == '10')
       commands.unshift({"page":"10","cmd":"BUTTON0"})
 
     //loop through them.
     if (wm_page == '4' || wm_page == '10')
-      runUICommands(commands)
+      queueUICommands(commands)
   }
   
-  function runUICommands(commands){
+  function queueUICommands(commands){
     for (var i = 0; i < commands.length; i++) {
       var cmd = commands[i]
       setTimeout(runUICommand,(i+1) * 1500, cmd);
@@ -147,45 +162,17 @@ module.exports = function(app, options) {
   function handleMetas() {
     var metas = [
       {
-        path: 'watermaker.spectra.bat_v',
+        path: 'watermaker.spectra.autostore',
         value: {
-          units: 'V',
-          description: 'Voltage at drive electronics'
+          units: 's',
+          description: 'Seconds before next autostore cycle'
         }
       },
       {
-        path: 'watermaker.spectra.boost_p',
+        path: 'watermaker.spectra.elapsedTime',
         value: {
-          units: 'Pa',
-          description: 'Boost pump pressure'
-        }
-      },
-      {
-        path: 'watermaker.spectra.boost_p',
-        value: {
-          units: 'Pa',
-          description: 'Boost pump pressure'
-        }
-      },
-      {
-        path: 'watermaker.spectra.f_flow',
-        value: {
-          units: 'm3/s',
-          description: 'Feed water flowrate'
-        }
-      },
-      {
-        path: 'watermaker.spectra.feed_p',
-        value: {
-          units: 'Pa',
-          description: 'Feed pump pressure'
-        }
-      },
-      {
-        path: 'watermaker.spectra.p_flow',
-        value: {
-          units: 'm3/s',
-          description: 'Product (output) water flowrate'
+          units: 's',
+          description: 'Elapsed time in current run cycle'
         }
       },
       {
@@ -201,50 +188,169 @@ module.exports = function(app, options) {
           units: 'V',
           description: 'Internal 5v regulator voltage'
         }
-      },   
-      {
-        path: 'watermaker.spectra.reg_5v',
-        value: {
-          units: 'V',
-          description: 'Internal 5v regulator voltage'
-        }
-      }, 
-      {
-        path: 'watermaker.spectra.sal_1',
-        value: {
-          units: 'ppm',
-          description: 'Product (output) water salinity'
-        }
-      },   
-      {
-        path: 'watermaker.spectra.sal_2',
-        value: {
-          units: 'ppm',
-          description: 'Feed water salinity'
-        }
-      },   
-      {
-        path: 'watermaker.spectra.temp_1',
-        value: {
-          units: 'K',
-          description: 'Feed water temperature'
-        }
       },
       {
-        path: 'watermaker.spectra.autostore',
+        path: 'watermaker.spectra.carbonFilterCondition',
         value: {
-          units: 's',
-          description: 'Seconds before next autostore cycle'
+          units: '%',
+          description: 'Health of the carbon fresh water flush filter'
         }
-      },
+      },   
       {
-        path: 'watermaker.spectra.elapsed_time',
+        path: 'watermaker.spectra.clarkPumpCondition',
         value: {
-          units: 's',
-          description: 'Elapsed time in current run cycle'
+          units: '%',
+          description: 'Health of the Clark pump'
         }
-      }      
+      },      
+      {
+        path: 'watermaker.spectra.feedPumpCondition',
+        value: {
+          units: '%',
+          description: 'Health of the feed pump'
+        }
+      },      
+      {
+        path: 'watermaker.spectra.filterCondition',
+        value: {
+          units: '%',
+          description: 'Health of the feed water prefilter'
+        }
+      },      
+      {
+        path: 'watermaker.spectra.membraneConditon',
+        value: {
+          units: '%',
+          description: 'Health of the RO membrane'
+        }
+      },      
+      
     ]
+    
+    //are we using new style values or old style?
+    if (plugin.options.useSignalKStyleValues)
+    {
+      metas = metas.concat([
+        {
+          path: 'watermaker.spectra.batteryVoltage',
+          value: {
+            units: 'V',
+            description: 'Voltage at drive electronics'
+          }
+        },
+        {
+          path: 'watermaker.spectra.boostPressure',
+          value: {
+            units: 'Pa',
+            description: 'Boost pump pressure'
+          }
+        },
+        {
+          path: 'watermaker.spectra.feedWaterFlowrate',
+          value: {
+            units: 'LPH',
+            description: 'Feed water flowrate'
+          }
+        },
+        {
+          path: 'watermaker.spectra.feedWaterPressure',
+          value: {
+            units: 'Pa',
+            description: 'Feed pump pressure'
+          }
+        },
+        {
+          path: 'watermaker.spectra.productWaterFlowrate',
+          value: {
+            units: 'LPH',
+            description: 'Product (output) water flowrate'
+          }
+        },
+        {
+          path: 'watermaker.spectra.productWaterSalinity',
+          value: {
+            units: 'ppm',
+            description: 'Product (output) water salinity'
+          }
+        },   
+        {
+          path: 'watermaker.spectra.feedWaterSalinity',
+          value: {
+            units: 'ppm',
+            description: 'Feed water salinity'
+          }
+        },   
+        {
+          path: 'watermaker.spectra.feedWaterTemperature',
+          value: {
+            units: 'K',
+            description: 'Feed water temperature'
+          }
+        }
+      ])
+    }
+    //okay, old style values
+    else
+    {
+      metas = metas.concat([
+        {
+          path: 'watermaker.spectra.bat_v',
+          value: {
+            units: 'V',
+            description: 'Voltage at drive electronics'
+          }
+        },
+        {
+          path: 'watermaker.spectra.boost_p',
+          value: {
+            units: 'psi',
+            description: 'Boost pump pressure'
+          }
+        },
+        {
+          path: 'watermaker.spectra.f_flow',
+          value: {
+            units: 'gph',
+            description: 'Feed water flowrate'
+          }
+        },
+        {
+          path: 'watermaker.spectra.feed_p',
+          value: {
+            units: 'psi',
+            description: 'Feed pump pressure'
+          }
+        },
+        {
+          path: 'watermaker.spectra.p_flow',
+          value: {
+            units: 'gph',
+            description: 'Product (output) water flowrate'
+          }
+        },
+        {
+          path: 'watermaker.spectra.sal_1',
+          value: {
+            units: 'ppm',
+            description: 'Product (output) water salinity'
+          }
+        },   
+        {
+          path: 'watermaker.spectra.sal_2',
+          value: {
+            units: 'ppm',
+            description: 'Feed water salinity'
+          }
+        },   
+        {
+          path: 'watermaker.spectra.temp_1',
+          value: {
+            units: 'F',
+            description: 'Feed water temperature'
+          }
+        }
+      ])
+    }
 
     // Publish metas only once
     app.handleMessage(plugin.id, {
@@ -280,6 +386,41 @@ module.exports = function(app, options) {
         }
       }
       
+      //do we want to convert to more SignalK style?
+      if (plugin.options.useSignalKStyleValues) {
+        switch (key) {
+          case 'bat_v':
+            key = 'batteryVoltage'
+            break
+          case 'boost_p':
+            key = 'boostPressure'
+            value = value * 6894.76
+            break
+          case 'f_flow':
+            key = 'feedWaterFlowrate'
+            value = value * 3.7854117842063197
+            break
+          case 'feed_p':
+            key = 'feedWaterPressure'
+            value = value * 6894.76
+            break
+          case 'p_flow':
+            key = 'productWaterFlowrate'
+            value = value * 3.7854117842063197
+            break
+          case 'sal_1':
+            key = 'productWaterSalinity'
+            break
+          case 'sal_2':
+            key = 'feedWaterSalinity'
+            break
+          case 'temp_1':
+            key = 'feedWaterTemperature'
+            value = (value - 32) * 5/9 + 273.15
+            break
+        }
+      }
+      
       //prepare our update
       var update = {
         path: 'watermaker.spectra.' + key,
@@ -288,7 +429,7 @@ module.exports = function(app, options) {
       updateValues.push(update)
     }
     var updates = { updates: [ { values: updateValues } ] }
-    //app.debug(JSON.stringify(updates))
+    app.debug(JSON.stringify(updates))
     app.handleMessage(plugin.id, updates)
   }
   
@@ -333,18 +474,17 @@ module.exports = function(app, options) {
   function parseElapsedTime(json, updateValues) {
     var m
     if ((m = elapsed_regex.exec(json.label8)) !== null) {
-      app.debug(m)
       
       if (m[2])
-        var elapsed_time = (m[2] * 24 * 60 * 60) + (m[4] * 60 * 60) + (m[5] * 60)
+        var elapsedTime = (m[2] * 24 * 60 * 60) + (m[4] * 60 * 60) + (m[5] * 60)
       else if (m[4])
-        var elapsed_time = (m[4] * 60 * 60) + (m[5] * 60)
+        var elapsedTime = (m[4] * 60 * 60) + (m[5] * 60)
       else
-        var elapsed_time = (m[5] * 60)
+        var elapsedTime = (m[5] * 60)
 
       updateValues.push({
-        path: 'watermaker.spectra.elapsed_time',
-        value: elapsed_time
+        path: 'watermaker.spectra.elapsedTime',
+        value: elapsedTime
       })
     }
 
@@ -371,7 +511,7 @@ module.exports = function(app, options) {
       var percent = parseFloat(m[1])/100
 
       updateValues.push({
-        path: 'watermaker.spectra.feedpumpCondition',
+        path: 'watermaker.spectra.feedPumpCondition',
         value: percent
       })
     }
@@ -596,14 +736,18 @@ module.exports = function(app, options) {
   plugin.start = function(options, restartPlugin) {
     app.debug('Starting plugin');
     app.debug('Options: ' + JSON.stringify(options));
+    plugin.options = options
     
     handleMetas()
     
     //register all our put handlers
-    app.registerPutHandler('vessels.self', 'watermaker.spectra.control.start', doStartWatermaker, 'signalk-spectra-plugin');
-    app.registerPutHandler('vessels.self', 'watermaker.spectra.control.stop', doStopWatermaker, 'signalk-spectra-plugin');
-    app.registerPutHandler('vessels.self', 'watermaker.spectra.control.toggleSpeed', doToggleWatermakerOutputSpeed, 'signalk-spectra-plugin');
-    app.registerPutHandler('vessels.self', 'watermaker.spectra.control.lookupStats', doLookupStats, 'signalk-spectra-plugin');
+    if (options.allowPuts)
+    {
+      app.registerPutHandler('vessels.self', 'watermaker.spectra.control.start', doStartWatermaker, 'signalk-spectra-plugin');
+      app.registerPutHandler('vessels.self', 'watermaker.spectra.control.stop', doStopWatermaker, 'signalk-spectra-plugin');
+      app.registerPutHandler('vessels.self', 'watermaker.spectra.control.toggleSpeed', doToggleWatermakerOutputSpeed, 'signalk-spectra-plugin');
+      app.registerPutHandler('vessels.self', 'watermaker.spectra.control.lookupStats', doLookupStats, 'signalk-spectra-plugin');
+    }
 
     //this is our websocket that connects to the 'data' stream
     const SpectraIP = options.IP;
@@ -633,7 +777,8 @@ module.exports = function(app, options) {
       app.debug('Connected to Spectra Watermaker UI socket')
 
       //let us figure out what page we're on then load data.
-      setTimeout(loadAllStats, 3000)
+      if (options.allowDetailedStats)
+        setTimeout(loadAllStats, 3000)
     }
  
     ui_ws.onclose = () => {
