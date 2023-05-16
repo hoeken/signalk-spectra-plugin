@@ -11,7 +11,6 @@ var wm_page = 0
 
 /* TODO List:
 
-- Add a call on after run start to move 1 page left to get the elapsed and filter quality
 - Update the readme with info on new features + node red flows + grafana export (if possible... maybe as files in the plugin)
 
 */
@@ -183,13 +182,6 @@ module.exports = function(app, options) {
         }
       },
       {
-        path: 'watermaker.spectra.reg_5v',
-        value: {
-          units: 'V',
-          description: 'Internal 5v regulator voltage'
-        }
-      },
-      {
         path: 'watermaker.spectra.carbonFilterCondition',
         value: {
           units: '%',
@@ -236,6 +228,13 @@ module.exports = function(app, options) {
           value: {
             units: 'V',
             description: 'Voltage at drive electronics'
+          }
+        },
+        {
+          path: 'watermaker.spectra.regulatorVoltage',
+          value: {
+            units: 'V',
+            description: 'Internal 5v regulator voltage'
           }
         },
         {
@@ -298,6 +297,13 @@ module.exports = function(app, options) {
           value: {
             units: 'V',
             description: 'Voltage at drive electronics'
+          }
+        },
+        {
+          path: 'watermaker.spectra.reg_5v',
+          value: {
+            units: 'V',
+            description: 'Internal 5v regulator voltage'
           }
         },
         {
@@ -391,6 +397,9 @@ module.exports = function(app, options) {
         switch (key) {
           case 'bat_v':
             key = 'batteryVoltage'
+            break
+          case 'reg_5v':
+            key = 'regulatorVoltage'
             break
           case 'boost_p':
             key = 'boostPressure'
@@ -724,7 +733,7 @@ module.exports = function(app, options) {
     //lets keep our page too, cant hurt
     var update = {
         path: 'watermaker.spectra.uiPage',
-        value: wm_page
+        value: parseInt(wm_page)
     }
     updateValues.push(update)
 
