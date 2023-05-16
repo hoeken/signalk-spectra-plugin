@@ -1,0 +1,7 @@
+v1.0.0:
+
+* Added ability to control watermaker start/stop/speed toggle/data lookup through SignalK with PUT commands
+* Changed to SI units and SignalK style camelCase for logged variables (option to keep original / raw values)
+* Added more metadata about logged data
+* Added example Node-RED flows and Grafana dashboard
+* Added ability to pull in more detailed information like elapsed time, health of system components, time to autostore, etc.
