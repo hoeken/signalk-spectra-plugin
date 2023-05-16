@@ -46,7 +46,7 @@ module.exports = function(app, options) {
       },
       useSignalKStyleValues: {
 	      type: 'boolean',
-	      title: 'Log SignalK style values (SI units and camelCase) (default in 1.0.0) or old raw values (default in 0.2.0)',
+	      title: 'Log SignalK style values (SI units and camelCase) (default in 1.0.0) or old raw values (default in 0.0.2)',
 	      default: true
       }
     }
@@ -109,7 +109,6 @@ module.exports = function(app, options) {
     app.debug("Looking up stats")
     if(wm_state == 'idle' && plugin.options.allowDetailedStats){
       loadAllStats()
-      app.debug('Finished')
       return { state: 'COMPLETED', statusCode: 200 };
     } else {
       return { state: 'COMPLETED', statusCode: 400 };
@@ -148,7 +147,7 @@ module.exports = function(app, options) {
   
   function runUICommand(cmd) {
     ui_ws.send(JSON.stringify(cmd))
-    app.debug("Running command: " + JSON.stringify(cmd))
+    //app.debug("Running command: " + JSON.stringify(cmd))
   }
   
   // our metadata for our data fields
@@ -432,7 +431,7 @@ module.exports = function(app, options) {
       updateValues.push(update)
     }
     var updates = { updates: [ { values: updateValues } ] }
-    app.debug(JSON.stringify(updates))
+    //app.debug(JSON.stringify(updates))
     app.handleMessage(plugin.id, updates)
   }
   
@@ -713,7 +712,7 @@ module.exports = function(app, options) {
       //unknown page here
       default:
         wm_state = 'idle'
-        app.debug(dataObj)     
+        app.debug("Unknown page: " + JSON.stringify(dataObj))     
         break
     }
     
