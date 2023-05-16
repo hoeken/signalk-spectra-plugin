@@ -1,6 +1,6 @@
 {
   "name": "signalk-spectra-plugin",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Signal K plugin to interface with Spectra Watermakers",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -12,6 +12,9 @@
   ],
   "signalk-plugin-enabled-by-default": true,
   "author": "Hans Tool <hans@defect.org>",
+  "contributors": [
+    "Zach Hoeken <hoeken@gmail.com>"
+  ],
   "main": "plugin/index.js",
   "license": "ISC",
   "repository": {

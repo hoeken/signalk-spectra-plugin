@@ -9,12 +9,6 @@ var plugin = {}
 var wm_state = 'unknown'
 var wm_page = 0
 
-/* TODO List:
-
-- Update the readme with info on new features + node red flows + grafana export (if possible... maybe as files in the plugin)
-
-*/
-
 module.exports = function(app, options) {
   "use strict"
   var plugin = {}
