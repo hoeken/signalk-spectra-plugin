@@ -85,6 +85,63 @@ module.exports = function(app, options) {
     return { state: 'COMPLETED', statusCode: 400 };
   }
   
+  function doStartWatermaker(context, path, value, callback) {
+    app.debug("Start watermaker")
+    
+    if (value.mode)
+    {
+      if(wm_state == 'idle')
+      {
+        //empty commands array
+        var commands = []
+      
+        //page 10 is our idle 'autostore' countdown page, so add this to the beginning
+        if (wm_page == '10')
+          commands.push({"page":"10","cmd":"BUTTON0"})
+      
+        //hit the 'start' button
+        commands.push({"page":"4","cmd":"BUTTON1"})
+
+        //filltank is just a single button
+        if(value.mode == 'filltank')
+          commands.push({"page":"37","cmd":"BUTTON0"})
+        //or use the autofill mode
+        else if (value.mode == 'autofill')
+        {
+          commands.push({"page":"37","cmd":"BUTTON1"})
+          if (value.liters)
+          {
+            commands.push({"page":"29","cmd":"BUTTON1"})
+            commands.push({"page":"29","cmd":"LABEL0"})
+            commands.push({"page":"12","data":value.liters})
+            commands.push({"page":"29","cmd":"BUTTON3"})
+          }
+          //run for a set # of hours
+          else if (value.hours)
+          {
+            commands.push({"page":"29","cmd":"BUTTON2"})
+            commands.push({"page":"29","cmd":"LABEL0"})
+            commands.push({"page":"12","data":value.hours})
+            commands.push({"page":"29","cmd":"BUTTON3"})
+          }
+        }
+
+        //are we already on the main page?
+        if (wm_page == '4' || wm_page == '10')
+        {
+          queueUICommands(commands)
+        
+          //this will switch to our data page after startup
+          if (plugin.options.allowDetailedStats)
+            setTimeout(runUICommand,(commands.length+1) * 1500 + 15000, {"page":"32","cmd":"BUTTON1"});
+
+          return { state: 'COMPLETED', statusCode: 200 };
+        }
+      }
+    }
+    return { state: 'COMPLETED', statusCode: 400 };
+  }
+  
   function doStopWatermaker(context, path, value, callback) {
     app.debug("Stop watermaker")
     if(wm_state == 'running'){
