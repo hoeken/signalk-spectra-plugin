@@ -211,7 +211,7 @@ module.exports = function(app, options) {
   function handleMetas() {
     var metas = [
       {
-        path: 'watermaker.spectra.autostore',
+        path: 'watermaker.spectra.timeToAutostore',
         value: {
           units: 's',
           description: 'Seconds before next autostore cycle'
@@ -505,7 +505,7 @@ module.exports = function(app, options) {
         var autostore = (m[5] * 60)
 
       updateValues.push({
-        path: 'watermaker.spectra.autostore',
+        path: 'watermaker.spectra.timeToAutostore',
         value: autostore
       })
     }
