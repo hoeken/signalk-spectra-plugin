@@ -21,7 +21,7 @@ module.exports = function(app, options) {
   //various regexes
   const autostore_regex = /Autostore : ((\d+)d )?((\d+)h )?(\d+)m/gm;
   const elapsed_regex = /((\d+)d )?((\d+)h )?(\d+)m/gm;
-  const percent_regex = /((\d+).\d+)%/gm;
+  const percent_regex = /((\d+)(.\d+)?)%/gm;
   const version_regex = /Firmware Rev.  : v(\d+.\d+.\d+)/gm;
 
   var schema = {
